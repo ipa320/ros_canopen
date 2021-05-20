@@ -16,6 +16,8 @@ void print_frame(const Frame &f){
         std::cout << "E " << std::hex << f.id << std::dec;
     }else if(f.is_extended){
         std::cout << "e " << std::hex << f.id << std::dec;
+    }else if(f.is_fd){
+        std::cout << "f " << std::hex << f.id << std::dec;
     }else{
         std::cout << "s " << std::hex << f.id << std::dec;
     }

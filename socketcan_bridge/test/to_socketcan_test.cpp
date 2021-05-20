@@ -84,7 +84,7 @@ TEST(TopicToSocketCANTest, checkCorrectData)
   msg.dlc = 8;
   for (uint8_t i=0; i < msg.dlc; i++)
   {
-    msg.data[i] = i;
+    msg.data.push_back(i);
   }
 
   msg.header.frame_id = "0";  // "0" for no frame.
@@ -105,6 +105,65 @@ TEST(TopicToSocketCANTest, checkCorrectData)
 
   EXPECT_EQ(received.id, msg.id);
   EXPECT_EQ(received.dlc, msg.dlc);
+  EXPECT_EQ(received.is_extended, msg.is_extended);
+  EXPECT_EQ(received.is_rtr, msg.is_rtr);
+  EXPECT_EQ(received.is_error, msg.is_error);
+  EXPECT_EQ(received.data, msg.data);
+}
+
+TEST(TopicToSocketCANTest, checkCorrectFdData)
+{
+  ros::NodeHandle nh(""), nh_param("~");
+
+  // create the dummy interface
+  can::DummyInterfaceSharedPtr driver_ = std::make_shared<can::DummyInterface>(true);
+
+  // start the to topic bridge.
+  socketcan_bridge::TopicToSocketCAN to_socketcan_bridge(&nh, &nh_param, driver_);
+  to_socketcan_bridge.setup();
+
+  // init the driver to test stateListener (not checked automatically).
+  driver_->init("string_not_used", true);
+
+  // register for messages on received_messages.
+  ros::Publisher publisher_ = nh.advertise<can_msgs::Frame>("sent_messages", 10);
+
+  // create a frame collector.
+  frameCollector frame_collector_;
+
+  //  driver->createMsgListener(&frameCallback);
+  can::FrameListenerConstSharedPtr frame_listener_ = driver_->createMsgListener(
+
+            std::bind(&frameCollector::frameCallback, &frame_collector_, std::placeholders::_1));
+
+  // create a message
+  can_msgs::Frame msg;
+  msg.is_extended = true;
+  msg.is_rtr = false;
+  msg.is_error = false;
+  msg.id = 0x123;
+  msg.dlc = 64 | can_msgs::Frame::DLC_FD_BRS_FLAG;
+  for (uint8_t i=0; i < 64; i++)
+  {
+    msg.data.push_back(i);
+  }
+
+  msg.header.frame_id = "0";  // "0" for no frame.
+  msg.header.stamp = ros::Time::now();
+
+  // send the can_frame::Frame message to the sent_messages topic.
+  publisher_.publish(msg);
+
+  // give some time for the interface some time to process the message
+  ros::WallDuration(1.0).sleep();
+  ros::spinOnce();
+
+  can_msgs::Frame received;
+  can::Frame f = frame_collector_.frames.back();
+  socketcan_bridge::convertSocketCANToMessage(f, received);
+
+  EXPECT_EQ(received.id, msg.id);
+  EXPECT_EQ(received.dlc, 64);
   EXPECT_EQ(received.is_extended, msg.is_extended);
   EXPECT_EQ(received.is_rtr, msg.is_rtr);
   EXPECT_EQ(received.is_error, msg.is_error);
@@ -174,8 +233,8 @@ TEST(TopicToSocketCANTest, checkInvalidFrameHandling)
   frame_collector_.frames.clear();
 
 
-  // finally, check if frames with a dlc > 8 are discarded.
-  msg.dlc = 10;
+  // finally, check if frames with a dlc > 64 are discarded.
+  msg.dlc = 65;
   publisher_.publish(msg);
   ros::WallDuration(1.0).sleep();
   ros::spinOnce();

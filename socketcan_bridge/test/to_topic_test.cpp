@@ -111,7 +111,69 @@ TEST(SocketCANToTopicTest, checkCorrectData)
   EXPECT_EQ(received.is_extended, f.is_extended);
   EXPECT_EQ(received.is_rtr, f.is_rtr);
   EXPECT_EQ(received.is_error, f.is_error);
-  EXPECT_EQ(received.data, f.data);
+  for (int i = 0; i < f.dlc; ++i)
+  {
+    EXPECT_EQ(received.data[i], f.data[i]);
+  }
+}
+
+TEST(SocketCANToTopicTest, checkCorrectFdData)
+{
+  ros::NodeHandle nh(""), nh_param("~");
+
+  // create the dummy interface
+  can::DummyInterfaceSharedPtr driver_ = std::make_shared<can::DummyInterface>(true);
+
+  // start the to topic bridge.
+  socketcan_bridge::SocketCANToTopic to_topic_bridge(&nh, &nh_param, driver_);
+  to_topic_bridge.setup();  // initiate the message callbacks
+
+  // init the driver to test stateListener (not checked automatically).
+  driver_->init("string_not_used", true);
+
+  // create a frame collector.
+  msgCollector message_collector_;
+
+  // register for messages on received_messages.
+  ros::Subscriber subscriber_ = nh.subscribe("received_messages", 1, &msgCollector::msgCallback, &message_collector_);
+
+  // create a can frame
+  can::Frame f;
+  f.is_extended = true;
+  f.is_rtr = false;
+  f.is_error = false;
+  f.id = 0x123;
+  f.dlc = 64;
+  f.is_fd = true;
+  for (uint8_t i=0; i < f.dlc; i++)
+  {
+    f.data[i] = i;
+  }
+
+  // send the can frame to the driver
+  driver_->send(f);
+
+  // give some time for the interface some time to process the message
+  ros::WallDuration(1.0).sleep();
+  ros::spinOnce();
+
+  ASSERT_EQ(1, message_collector_.messages.size());
+
+  // compare the received can_msgs::Frame message to the sent can::Frame.
+  can::Frame received;
+  can_msgs::Frame msg = message_collector_.messages.back();
+  socketcan_bridge::convertMessageToSocketCAN(msg, received);
+
+  EXPECT_EQ(received.id, f.id);
+  EXPECT_EQ(received.dlc, f.dlc);
+  EXPECT_EQ(received.is_extended, f.is_extended);
+  EXPECT_EQ(received.is_rtr, f.is_rtr);
+  EXPECT_EQ(received.is_error, f.is_error);
+  EXPECT_EQ(received.is_fd, f.is_fd);
+  for (int i = 0; i < f.dlc; ++i)
+  {
+    EXPECT_EQ(received.data[i], f.data[i]);
+  }
 }
 
 TEST(SocketCANToTopicTest, checkInvalidFrameHandling)
@@ -120,7 +182,7 @@ TEST(SocketCANToTopicTest, checkInvalidFrameHandling)
   //   that should not be sent.
   // - verifies that sending one larger than 11 bits actually works.
 
-  // sending a message with a dlc > 8 is not possible as the DummyInterface
+  // sending a message with a dlc > 64 is not possible as the DummyInterface
   // causes a crash then.
 
   ros::NodeHandle nh(""), nh_param("~");
@@ -221,7 +283,10 @@ TEST(SocketCANToTopicTest, checkCorrectCanIdFilter)
   EXPECT_EQ(received.is_extended, f.is_extended);
   EXPECT_EQ(received.is_rtr, f.is_rtr);
   EXPECT_EQ(received.is_error, f.is_error);
-  EXPECT_EQ(received.data, f.data);
+  for (int i = 0; i < f.dlc; ++i)
+  {
+    EXPECT_EQ(received.data[i], f.data[i]);
+  }
 }
 
 TEST(SocketCANToTopicTest, checkInvalidCanIdFilter)

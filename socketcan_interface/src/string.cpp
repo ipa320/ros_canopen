@@ -109,23 +109,45 @@ Header toheader(const std::string& s) {
 
 std::string tostring(const Frame& f, bool lc) {
 	std::string s;
+	std::string sep = "#";
 	s.resize(f.dlc);
 	for (uint8_t i = 0; i < f.dlc; ++i) {
 		s[i] = f.data[i];
 	}
-	return tostring((const Header&) (f), lc) + '#' + buffer2hex(s, lc);
+
+	if (f.is_fd) {
+		char flags;
+		dec2hex(flags, f.flags, false);
+		sep += "#";
+		sep += flags;
+	}
+
+	return tostring((const Header&) (f), lc) + sep + buffer2hex(s, lc);
 }
 
 Frame toframe(const std::string& s) {
 	size_t sep = s.find('#');
+	bool is_fd = false;
+	uint8_t fd_flags = 0;
 	if (sep == std::string::npos)
 		return MsgHeader(0xfff);
 
+
+	if ((s.size() > sep + 1) && (s[sep + 1] == '#')) {
+		// CAN FD frame. First nibble after ## is FD flags.
+		is_fd = true;
+		if (!hex2dec(fd_flags, s[sep + 2]))
+			return MsgHeader(0xfff);
+		sep += 2;
+	}
+
 	Header header = toheader(s.substr(0, sep));
+	header.flags = fd_flags;
+	header.is_fd = is_fd;
 	Frame frame(header);
 	std::string buffer;
 	if (header.isValid() && hex2buffer(buffer, s.substr(sep + 1), false)) {
-		if (buffer.size() > 8)
+		if (buffer.size() > frame.data.size())
 			return MsgHeader(0xfff);
 
 		for (size_t i = 0; i < buffer.size(); ++i) {

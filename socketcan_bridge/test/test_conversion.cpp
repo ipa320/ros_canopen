@@ -95,7 +95,7 @@ TEST(ConversionTest, topicToSocketCANStandard)
   m.is_extended = false;
   for (uint8_t i = 0; i < m.dlc; ++i)
   {
-    m.data[i] = i;
+    m.data.push_back(i);
   }
   socketcan_bridge::convertMessageToSocketCAN(m, f);
   EXPECT_EQ(127, f.id);

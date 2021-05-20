@@ -18,12 +18,21 @@
 #include <socketcan_interface/dispatcher.h>
 #include <socketcan_interface/string.h>
 
+#ifdef CANFD_MAX_DLC
+    #define CAN_FRAME_TYPE canfd_frame
+    #define CAN_FRAME_TYPE_DLC_FIELD len
+#else
+    #define CAN_FRAME_TYPE can_frame
+    #define CAN_FRAME_TYPE_DLC_FIELD can_dlc
+#endif
+
 namespace can {
 
 class SocketCANInterface : public AsioDriver<boost::asio::posix::stream_descriptor> {
     bool loopback_;
     int sc_;
     can_err_mask_t error_mask_, fatal_error_mask_;
+    bool use_canfd_;
 
     static can_err_mask_t parse_error_mask(SettingsConstSharedPtr settings, const std::string &entry, can_err_mask_t defaults) {
         can_err_mask_t mask = 0;
@@ -44,11 +53,15 @@ class SocketCANInterface : public AsioDriver<boost::asio::posix::stream_descript
     }
 public:
     SocketCANInterface()
-    : loopback_(false), sc_(-1), error_mask_(0), fatal_error_mask_(0)
+    : loopback_(false), sc_(-1), error_mask_(0), fatal_error_mask_(0), use_canfd_(true)
     {}
 
     virtual bool doesLoopBack() const{
         return loopback_;
+    }
+
+    virtual bool usingCanFd() const{
+        return use_canfd_;
     }
 
     can_err_mask_t getErrorMask() const {
@@ -131,7 +144,7 @@ public:
     }
 protected:
     std::string device_;
-    can_frame frame_;
+    CAN_FRAME_TYPE frame_;
 
     bool init(const std::string &device, bool loopback, can_err_mask_t error_mask, can_err_mask_t fatal_error_mask) {
         State s = getState();
@@ -157,6 +170,7 @@ protected:
                 close(sc);
                 return false;
             }
+
             ret = setsockopt(sc, SOL_CAN_RAW, CAN_RAW_ERR_FILTER,
                &error_mask, sizeof(error_mask));
 
@@ -176,6 +190,19 @@ protected:
                     return false;
                 }
             }
+
+#ifdef CANFD_MAX_DLC
+            if(use_canfd_){
+                const int canfd_on = 1;
+                ret = setsockopt(sc, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &canfd_on, sizeof(canfd_on));
+
+                if(ret != 0){
+                    use_canfd_ = false;
+                }
+            }
+#else
+            use_canfd_ = false;
+#endif
 
             struct sockaddr_can addr = {0};
             addr.can_family = AF_CAN;
@@ -205,24 +232,42 @@ protected:
         return getState().isReady();
     }
 
+
+
     virtual void triggerReadSome(){
         boost::mutex::scoped_lock lock(send_mutex_);
-        socket_.async_read_some(boost::asio::buffer(&frame_, sizeof(frame_)), boost::bind( &SocketCANInterface::readFrame,this, boost::asio::placeholders::error));
+        size_t rxlen = sizeof(can_frame);
+#ifdef CANFD_MAX_DLC
+        if(use_canfd_){
+            rxlen = sizeof(frame_);
+        }
+#endif
+        socket_.async_read_some(boost::asio::buffer(&frame_, rxlen),
+                                boost::bind(&SocketCANInterface::readFrame, this,
+                                            boost::asio::placeholders::error,
+                                            boost::asio::placeholders::bytes_transferred));
     }
 
     virtual bool enqueue(const Frame & msg){
         boost::mutex::scoped_lock lock(send_mutex_); //TODO: timed try lock
 
-        can_frame frame = {0};
-        frame.can_id = msg.id | (msg.is_extended?CAN_EFF_FLAG:0) | (msg.is_rtr?CAN_RTR_FLAG:0);;
-        frame.can_dlc = msg.dlc;
+        CAN_FRAME_TYPE frame = {0};
+        frame.can_id = msg.id | (msg.is_extended?CAN_EFF_FLAG:0) | (msg.is_rtr?CAN_RTR_FLAG:0);
+        frame.CAN_FRAME_TYPE_DLC_FIELD = msg.dlc;
 
+        size_t txlen = sizeof(can_frame);
+#ifdef CANFD_MAX_DLC
+        if(use_canfd_){
+            frame.flags = msg.flags;
+            txlen = sizeof(frame);
+        }
+#endif
 
-        for(int i=0; i < frame.can_dlc;++i)
+        for(int i=0; i < frame.CAN_FRAME_TYPE_DLC_FIELD;++i)
             frame.data[i] = msg.data[i];
 
         boost::system::error_code ec;
-        boost::asio::write(socket_, boost::asio::buffer(&frame, sizeof(frame)),boost::asio::transfer_all(), ec);
+        boost::asio::write(socket_, boost::asio::buffer(&frame, txlen),boost::asio::transfer_all(), ec);
         if(ec){
             ROSCANOPEN_ERROR("socketcan_interface", "FAILED " << ec);
             setErrorCode(ec);
@@ -233,10 +278,21 @@ protected:
         return true;
     }
 
-    void readFrame(const boost::system::error_code& error){
+    void readFrame(const boost::system::error_code& error, size_t bytes_transferred){
         if(!error){
-            input_.dlc = frame_.can_dlc;
-            for(int i=0;i<frame_.can_dlc && i < 8; ++i){
+            input_.dlc = frame_.CAN_FRAME_TYPE_DLC_FIELD;
+#ifdef CANFD_MAX_DLC
+            if(bytes_transferred == CANFD_MTU){
+                input_.is_fd = true;
+                input_.flags = frame_.flags;
+            }
+            else
+#endif
+            {
+                input_.is_fd = false;
+            }
+
+            for(int i=0;i<input_.dlc; ++i){
                 input_.data[i] = frame_.data[i];
             }
 

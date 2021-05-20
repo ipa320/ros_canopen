@@ -24,6 +24,8 @@ struct Header{
     unsigned int is_error:1; ///< marks an error frame (only used internally)
     unsigned int is_rtr:1; ///< frame is a remote transfer request
     unsigned int is_extended:1; ///< frame uses 29 bit CAN identifier
+    bool is_fd; ///< frame is a CAN FD frame
+    unsigned char flags; ///< additional flags for CAN FD
     /** check if frame header is valid*/
     bool isValid() const{
         return id < (is_extended?(1<<29):(1<<11));
@@ -39,10 +41,10 @@ struct Header{
         */
 
     Header()
-    : id(0),is_error(0),is_rtr(0), is_extended(0) {}
+    : id(0),is_error(0),is_rtr(0), is_extended(0), is_fd(false), flags(0) {}
 
-    Header(unsigned int i, bool extended, bool rtr, bool error)
-    : id(i),is_error(error?1:0),is_rtr(rtr?1:0), is_extended(extended?1:0) {}
+    Header(unsigned int i, bool extended, bool rtr, bool error, bool is_fd=false, unsigned char flags=0)
+    : id(i),is_error(error?1:0),is_rtr(rtr?1:0), is_extended(extended?1:0), is_fd(is_fd), flags(flags) {}
 };
 
 
@@ -61,12 +63,12 @@ struct ErrorHeader : public Header{
 /** representation of a CAN frame */
 struct Frame: public Header{
     using value_type = unsigned char;
-    std::array<value_type, 8> data; ///< array for 8 data bytes with bounds checking
+    std::array<value_type, 64> data; ///< array for 64 data bytes with bounds checking
     unsigned char dlc; ///< len of data
 
     /** check if frame header and length are valid*/
     bool isValid() const{
-        return (dlc <= 8)  &&  Header::isValid();
+        return (dlc <= data.size())  &&  Header::isValid();
     }
     /**
      * constructor with default parameters
