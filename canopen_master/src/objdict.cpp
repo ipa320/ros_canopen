@@ -109,6 +109,10 @@ void set_access( ObjectDict::Entry &entry, std::string access){
 
 template<typename T> T int_from_string(const std::string &s);
 
+template<> bool   int_from_string(const std::string &s){
+    return strtol(s.c_str(), 0, 0 ) > 0;
+}
+
 template<> int8_t int_from_string(const std::string &s){
     return strtol(s.c_str(), 0, 0);
 }
@@ -165,6 +169,7 @@ struct ReadAnyValue{
         return branch_type<ReadAnyValue, HoldAny (boost::property_tree::iptree &, const std::string &)>(data_type)(pt, key);
     }
 };
+template<> HoldAny ReadAnyValue::func<ObjectDict::DEFTYPE_BOOLEAN>(boost::property_tree::iptree &pt, const std::string &key){ return parse_int<bool>(pt, key); }
 template<> HoldAny ReadAnyValue::func<ObjectDict::DEFTYPE_INTEGER8>(boost::property_tree::iptree &pt, const std::string &key){  return parse_int<int8_t>(pt,key); }
 template<> HoldAny ReadAnyValue::func<ObjectDict::DEFTYPE_INTEGER16>(boost::property_tree::iptree &pt, const std::string &key){  return parse_int<int16_t>(pt,key); }
 template<> HoldAny ReadAnyValue::func<ObjectDict::DEFTYPE_INTEGER32>(boost::property_tree::iptree &pt, const std::string &key){  return parse_int<int32_t>(pt,key); }

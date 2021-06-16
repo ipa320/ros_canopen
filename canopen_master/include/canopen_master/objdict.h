@@ -146,6 +146,7 @@ public:
         RECORD = 0x09
     };
     enum DataTypes{
+        DEFTYPE_BOOLEAN  = 0x0001,
         DEFTYPE_INTEGER8 = 0x0002,
         DEFTYPE_INTEGER16 = 0x0003,
         DEFTYPE_INTEGER32 = 0x0004,
@@ -539,6 +540,7 @@ typedef ObjectStorage::ObjectStorageSharedPtr ObjectStorageSharedPtr;
 template<> String & ObjectStorage::Data::access();
 template<> String & ObjectStorage::Data::allocate();
 
+template<> struct ObjectStorage::DataType<ObjectDict::DEFTYPE_BOOLEAN>  { typedef bool type; };
 template<> struct ObjectStorage::DataType<ObjectDict::DEFTYPE_INTEGER8> { typedef int8_t type;};
 template<> struct ObjectStorage::DataType<ObjectDict::DEFTYPE_INTEGER16> { typedef int16_t type;};
 template<> struct ObjectStorage::DataType<ObjectDict::DEFTYPE_INTEGER32> { typedef int32_t type;};
@@ -559,6 +561,7 @@ template<> struct ObjectStorage::DataType<ObjectDict::DEFTYPE_DOMAIN> { typedef 
 
 template<typename T, typename R> static R *branch_type(const uint16_t data_type){
     switch(ObjectDict::DataTypes(data_type)){
+        case ObjectDict::DEFTYPE_BOOLEAN:  return T::template func< ObjectDict::DEFTYPE_BOOLEAN >;
         case ObjectDict::DEFTYPE_INTEGER8: return T::template func< ObjectDict::DEFTYPE_INTEGER8 >;
         case ObjectDict::DEFTYPE_INTEGER16: return T::template func< ObjectDict::DEFTYPE_INTEGER16 >;
         case ObjectDict::DEFTYPE_INTEGER32: return T::template func< ObjectDict::DEFTYPE_INTEGER32 >;

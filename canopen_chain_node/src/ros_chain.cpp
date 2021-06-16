@@ -3,6 +3,7 @@
 #include <socketcan_interface/xmlrpc_settings.h>
 #include <canopen_chain_node/ros_chain.h>
 
+#include <std_msgs/Bool.h>
 #include <std_msgs/Int8.h>
 #include <std_msgs/Int16.h>
 #include <std_msgs/Int32.h>
@@ -41,6 +42,7 @@ PublishFuncType createPublishFunc(ros::NodeHandle &nh,  const std::string &name,
     ObjectStorageSharedPtr s = node->getStorage();
 
     switch(ObjectDict::DataTypes(s->dict_->get(key)->data_type)){
+        case ObjectDict::DEFTYPE_BOOLEAN:        return create< std_msgs::Bool,    ObjectDict::DEFTYPE_BOOLEAN        >(nh, name, s, key, force);
         case ObjectDict::DEFTYPE_INTEGER8:       return create< std_msgs::Int8,    ObjectDict::DEFTYPE_INTEGER8       >(nh, name, s, key, force);
         case ObjectDict::DEFTYPE_INTEGER16:      return create< std_msgs::Int16,   ObjectDict::DEFTYPE_INTEGER16      >(nh, name, s, key, force);
         case ObjectDict::DEFTYPE_INTEGER32:      return create< std_msgs::Int32,   ObjectDict::DEFTYPE_INTEGER32      >(nh, name, s, key, force);
