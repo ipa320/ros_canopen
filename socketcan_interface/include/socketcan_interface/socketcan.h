@@ -77,8 +77,18 @@ public:
                                            | CAN_ERR_TRX          /* transceiver status  / data[4]    */
                                            | CAN_ERR_ACK          /* received no ACK on transmission */
                                            );
-      can_err_mask_t fatal_error_mask = parse_error_mask(settings, "fatal_error_mask", fatal_errors) | CAN_ERR_BUSOFF;
-      can_err_mask_t error_mask = parse_error_mask(settings, "error_mask", report_errors | fatal_error_mask) | fatal_error_mask;
+      can_err_mask_t fatal_error_mask = parse_error_mask(settings, "fatal_error_mask", fatal_errors);
+      can_err_mask_t error_mask = parse_error_mask(settings, "error_mask", report_errors | fatal_errors) | fatal_error_mask;
+      if(fatal_error_mask){
+        std::string fatal_errors;
+        translateError(fatal_error_mask, fatal_errors);
+        ROSCANOPEN_INFO("socketcan_interface", "Treating these errors as fatal: " << fatal_errors);
+      }
+      if(error_mask){
+        std::string errors;
+        translateError(error_mask, errors);
+        ROSCANOPEN_INFO("socketcan_interface", "Logging these errors: " << errors);
+      }
       return init(device, loopback, error_mask, fatal_error_mask);
     }
 
@@ -244,10 +254,13 @@ protected:
                 input_.id = frame_.can_id & CAN_EFF_MASK;
                 input_.is_error = 1;
 
-                if (frame_.can_id & fatal_error_mask_) {
+                if (frame_.can_id & error_mask_) {
                     ROSCANOPEN_ERROR("socketcan_interface", "internal error: " << input_.id);
                     setInternalError(input_.id);
-                    setNotReady();
+                    if (frame_.can_id & fatal_error_mask_) {
+                        ROSCANOPEN_ERROR("socketcan_interface", "fatal error, switching to not ready");
+                        setNotReady();
+                    }
                 }
             }else{
                 input_.is_extended = (frame_.can_id & CAN_EFF_FLAG) ? 1 :0;
