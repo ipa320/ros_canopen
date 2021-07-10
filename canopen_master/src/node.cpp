@@ -178,7 +178,7 @@ void Node::handleInit(LayerStatus &status){
 
     sdo_.init();
     try{
-        if(!reset_com()) BOOST_THROW_EXCEPTION( TimeoutException("reset_timeout") );
+        if(!reset()) BOOST_THROW_EXCEPTION( TimeoutException("reset_timeout") );
     }
     catch(const TimeoutException&){
         status.error(boost::str(boost::format("could not reset node '%1%'") % (int)node_id_));
