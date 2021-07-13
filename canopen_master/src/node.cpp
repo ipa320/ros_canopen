@@ -28,7 +28,8 @@ struct NMTcommand{
 #pragma pack(pop) /* pop previous alignment from stack */
 
 Node::Node(const can::CommInterfaceSharedPtr interface, const ObjectDictSharedPtr dict, uint8_t node_id, const SyncCounterSharedPtr sync)
-: Layer("Node 301"), node_id_(node_id), interface_(interface), sync_(sync) , state_(Unknown), sdo_(interface, dict, node_id), pdo_(interface){
+: Layer("Node 301"), node_id_(node_id), interface_(interface), sync_(sync) , state_(Unknown), sdo_(interface, dict, node_id), pdo_(interface),
+  wait_for_state_(Unknown){
     try{
         getStorage()->entry(heartbeat_, 0x1017);
     }
@@ -108,6 +109,7 @@ void Node::switchState(const uint8_t &s){
     }
     if(changed){
         state_ = (State) s;
+        if(s == wait_for_state_) wait_for_state_ = Unknown;
         state_dispatcher_.dispatch(state_);
         cond.notify_one();
     }
@@ -122,14 +124,15 @@ void Node::handleNMT(const can::Frame & msg){
 template<typename T> int Node::wait_for(const State &s, const T &timeout){
     boost::mutex::scoped_lock cond_lock(cond_mutex);
     time_point abs_time = get_abs_time(timeout);
+    wait_for_state_ = s;
 
-    while(s != state_) {
+    while(wait_for_state_ != Unknown) {
         if(cond.wait_until(cond_lock,abs_time) == boost::cv_status::timeout)
         {
             break;
         }
     }
-    if( s!= state_){
+    if(wait_for_state_ != Unknown){
         if(getHeartbeatInterval() == 0){
             switchState(s);
             return -1;

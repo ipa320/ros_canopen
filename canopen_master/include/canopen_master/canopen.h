@@ -247,6 +247,7 @@ private:
     void switchState(const uint8_t &s);
 
     State state_;
+    State wait_for_state_;
     SDOClient sdo_;
     PDOMapper pdo_;
 
